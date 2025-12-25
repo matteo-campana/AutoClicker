@@ -63,3 +63,7 @@ On macOS/Linux, the same `--onefile --windowed` build works; ensure the target m
 
 - PyAutoGUI failsafe is enabled; slam mouse to the upper-left corner to abort.
 - Extremely high click rates may be limited by the OS and hardware timing.
+
+## License
+
+Released under the MIT License. See [LICENSE.md](LICENSE.md).
