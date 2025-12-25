@@ -2,13 +2,22 @@ import threading
 import time
 import tkinter as tk
 from tkinter import ttk
+from typing import Callable
 
 try:
-    import pyautogui # type: ignore
+    import pyautogui  # type: ignore
 except ImportError as exc:
     raise SystemExit(
         "pyautogui is required. Install with: pip install -r requirements.txt"
     ) from exc
+
+try:
+    import keyboard  # type: ignore
+
+    _HAS_KEYBOARD = True
+except ImportError:
+    keyboard = None  # type: ignore
+    _HAS_KEYBOARD = False
 
 
 class AutoClickerApp(tk.Tk):
@@ -29,12 +38,14 @@ class AutoClickerApp(tk.Tk):
         self._click_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._running = False
+        self._global_hotkeys_registered = False
 
         # UI
         self._build_ui()
-        # Keyboard shortcuts
+        # Keyboard shortcuts (in-app and optional global)
         self.bind_all("<Control-Alt-s>", lambda event: self.start_clicking())
         self.bind_all("<Control-Alt-d>", lambda event: self.stop_clicking())
+        self._register_hotkeys()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # UI setup ------------------------------------------------------------
@@ -46,7 +57,9 @@ class AutoClickerApp(tk.Tk):
         title.grid(row=0, column=0, columnspan=2, pady=(0, 12))
 
         # Speed slider (clicks per second)
-        ttk.Label(main, text="Click speed (clicks/sec)").grid(row=1, column=0, sticky="w")
+        ttk.Label(main, text="Click speed (clicks/sec)").grid(
+            row=1, column=0, sticky="w"
+        )
         self.speed_var = tk.DoubleVar(value=5.0)
         self.speed_slider = ttk.Scale(
             main,
@@ -62,7 +75,9 @@ class AutoClickerApp(tk.Tk):
 
         # Buttons
         self.start_btn = ttk.Button(main, text="Start", command=self.start_clicking)
-        self.stop_btn = ttk.Button(main, text="Stop", command=self.stop_clicking, state=tk.DISABLED)
+        self.stop_btn = ttk.Button(
+            main, text="Stop", command=self.stop_clicking, state=tk.DISABLED
+        )
         self.start_btn.grid(row=4, column=0, padx=(0, 8))
         self.stop_btn.grid(row=4, column=1, padx=(8, 0))
 
@@ -84,6 +99,32 @@ class AutoClickerApp(tk.Tk):
         interval = self._current_interval()
         cps = self.speed_var.get()
         self.speed_label.config(text=f"{cps:.1f} cps (~{interval:.2f}s interval)")
+
+    def _register_hotkeys(self) -> None:
+        """Register global hotkeys when the optional keyboard module is present."""
+        if not _HAS_KEYBOARD or self._global_hotkeys_registered:
+            if not _HAS_KEYBOARD:
+                print("Global hotkeys unavailable: install the 'keyboard' package")
+            return
+
+        def _safe(fn: Callable[[], None]) -> Callable[[], None]:
+            # Ensure callbacks hop back onto the Tk event loop to avoid thread issues
+            return lambda: self._run_on_ui_thread(fn)
+
+        keyboard.add_hotkey("ctrl+alt+s", _safe(self.start_clicking))
+        keyboard.add_hotkey("ctrl+alt+d", _safe(self.stop_clicking))
+        self._global_hotkeys_registered = True
+
+    def _unregister_hotkeys(self) -> None:
+        if _HAS_KEYBOARD and self._global_hotkeys_registered:
+            keyboard.remove_hotkey("ctrl+alt+s")
+            keyboard.remove_hotkey("ctrl+alt+d")
+            self._global_hotkeys_registered = False
+
+    def _run_on_ui_thread(self, fn: Callable[[], None]) -> None:
+        if not self.winfo_exists():
+            return
+        self.after(0, fn)
 
     # Actions --------------------------------------------------------------
     def start_clicking(self) -> None:
@@ -125,6 +166,7 @@ class AutoClickerApp(tk.Tk):
 
     def _on_close(self) -> None:
         self._stop_event.set()
+        self._unregister_hotkeys()
         self.destroy()
 
 
