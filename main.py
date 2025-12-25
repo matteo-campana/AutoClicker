@@ -32,6 +32,9 @@ class AutoClickerApp(tk.Tk):
 
         # UI
         self._build_ui()
+        # Keyboard shortcuts
+        self.bind_all("<Control-Alt-s>", lambda event: self.start_clicking())
+        self.bind_all("<Control-Alt-d>", lambda event: self.stop_clicking())
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # UI setup ------------------------------------------------------------
